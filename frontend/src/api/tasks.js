@@ -40,6 +40,13 @@ export const deleteTask = async (id) => {
     })
 }
 
+export const deleteTasksByStatus = async (status) => {
+    const token = await getToken()
+    await axios.delete(`${API_URL}/tasks/bulk?status=${status}`, {
+        headers: { Authorization: `Bearer ${token}` }
+    })
+}
+
 // Subtasks
 export const createSubtask = async (subtask) => {
     const token = await getToken()

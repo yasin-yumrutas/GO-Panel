@@ -44,6 +44,7 @@ func Setup() *chi.Mux {
 		r.Patch("/tasks", api.UpdateTask) // PATCH destekle
 		r.Put("/tasks", api.UpdateTask)
 		r.Delete("/tasks", api.DeleteTask)
+		r.Delete("/tasks/bulk", api.DeleteTasksByStatus)
 
 		// Alt Görevler (Subtasks)
 		r.Post("/subtasks", api.CreateSubtask)

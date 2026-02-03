@@ -261,6 +261,34 @@ func DeleteTask(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "Görev silindi", "details": string(resp)})
 }
 
+// DeleteTasksByStatus verilen durumdaki tüm görevleri siler.
+func DeleteTasksByStatus(w http.ResponseWriter, r *http.Request) {
+	authHeader := r.Header.Get("Authorization")
+	if len(authHeader) < 8 {
+		http.Error(w, "Geçersiz Token formatı", http.StatusUnauthorized)
+		return
+	}
+	token := authHeader[7:]
+
+	status := r.URL.Query().Get("status")
+	if status == "" {
+		http.Error(w, "Status parametresi gerekli", http.StatusBadRequest)
+		return
+	}
+
+	// DELETE FROM tasks WHERE status = ...
+	endpoint := fmt.Sprintf("tasks?status=eq.%s", status)
+	resp, err := performSupabaseRequest("DELETE", endpoint, token, nil)
+	if err != nil {
+		fmt.Println("DeleteTasksByStatus Hatası:", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Görevler silindi", "details": string(resp)})
+}
+
 // CreateSubtask yeni bir alt görev ekler.
 func CreateSubtask(w http.ResponseWriter, r *http.Request) {
 	authHeader := r.Header.Get("Authorization")

@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react'
 import { DndContext, closestCenter, DragOverlay, defaultDropAnimationSideEffects, useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useAuth } from '../context/AuthContext'
-import { getTasks, createTask, updateTask, deleteTask, createSubtask, updateSubtask, deleteSubtask } from '../api/tasks'
+import { getTasks, createTask, updateTask, deleteTask, createSubtask, updateSubtask, deleteSubtask, deleteTasksByStatus } from '../api/tasks'
 import TaskCard from '../components/TaskCard'
 import Modal from '../components/Modal'
-import { Plus, Loader2, Trash2 } from 'lucide-react'
+import { Plus, Loader2, Trash2, Settings } from 'lucide-react'
 
 const COLUMNS = [
     { id: 'Todo', title: 'Yapılacaklar' },
@@ -13,13 +13,29 @@ const COLUMNS = [
     { id: 'Done', title: 'Tamamlandı' }
 ]
 
-function DroppableColumn({ column, tasks, children }) {
+import { useRef } from 'react'
+
+function DroppableColumn({ column, tasks, children, onClear }) {
     const { setNodeRef } = useDroppable({
         id: column.id,
     })
 
+    const [showMenu, setShowMenu] = useState(false)
+    const menuRef = useRef(null)
+
+    // Close menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (menuRef.current && !menuRef.current.contains(event.target)) {
+                setShowMenu(false)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
+
     return (
-        <div ref={setNodeRef} className="w-80 flex flex-col shrink-0 h-full">
+        <div ref={setNodeRef} className="w-80 flex flex-col shrink-0 h-full relative group/column">
             <div className="flex items-center justify-between mb-4">
                 <h2 className="font-bold text-sm text-foreground flex items-center gap-2">
                     <div className={`w-3 h-3 rounded-full 
@@ -29,9 +45,42 @@ function DroppableColumn({ column, tasks, children }) {
                     `} />
                     {column.title}
                 </h2>
-                <span className="bg-muted text-muted-foreground text-xs font-medium px-2 py-0.5 rounded-full">
-                    {tasks.length}
-                </span>
+                <div className="flex items-center gap-2">
+                    <span className="bg-muted text-muted-foreground text-xs font-medium px-2 py-0.5 rounded-full">
+                        {tasks.length}
+                    </span>
+
+                    {/* Settings Menu */}
+                    <div className="relative" ref={menuRef}>
+                        <button
+                            onClick={() => setShowMenu(!showMenu)}
+                            className="p-1 hover:bg-muted rounded-md text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                            <Settings className="h-4 w-4" />
+                        </button>
+
+                        {showMenu && (
+                            <div className="absolute right-0 top-full mt-1 w-48 bg-card border border-border shadow-lg rounded-lg z-50 overflow-hidden text-sm animate-in fade-in zoom-in-95 duration-200">
+                                {column.id === 'Done' ? (
+                                    <button
+                                        onClick={() => {
+                                            onClear()
+                                            setShowMenu(false)
+                                        }}
+                                        className="w-full flex items-center gap-2 px-3 py-2 text-destructive hover:bg-destructive/10 text-left transition-colors"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                        Tamamlananları Temizle
+                                    </button>
+                                ) : (
+                                    <div className="px-3 py-2 text-muted-foreground text-xs text-center">
+                                        Seçenek yok
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
             {children}
         </div>
@@ -279,6 +328,23 @@ export default function Board() {
     }
 
     // Functions moved up to state declaration area
+
+    const handleClearColumn = async (columnId) => {
+        if (columnId !== 'Done') return
+        if (!confirm("Tamamlanan tüm görevleri silmek istediğinize emin misiniz?")) return
+
+        // Optimistic delete
+        const previousTasks = [...tasks]
+        setTasks(tasks.filter(t => t.status !== 'Done'))
+
+        try {
+            await deleteTasksByStatus('Done')
+        } catch (error) {
+            console.error("Clear column failed", error)
+            setTasks(previousTasks)
+            alert("Silme işlemi başarısız oldu: " + error.message)
+        }
+    }
 
     const getTasksByColumn = (columnId) => tasks.filter(t => {
         if (columnId === 'Todo' && !t.status) return true // Fallback: Show tasks with missing status in 'Todo'
@@ -607,7 +673,11 @@ export default function Board() {
                                     ${isHiddenOnMobile ? 'hidden md:flex' : 'flex'}
                                 `}
                             >
-                                <DroppableColumn column={col} tasks={getTasksByColumn(col.id)}>
+                                <DroppableColumn
+                                    column={col}
+                                    tasks={getTasksByColumn(col.id)}
+                                    onClear={() => handleClearColumn(col.id)}
+                                >
                                     <div className="flex-1 bg-muted/50 rounded-2xl p-3 border border-border/50 flex flex-col min-h-0 overflow-y-auto">
                                         <SortableContext
                                             items={getTasksByColumn(col.id).map(t => t.id)}
