@@ -6,7 +6,10 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:9092/api'
 // Helper to get current session token
 const getToken = async () => {
     const { data: { session } } = await supabase.auth.getSession()
-    return session?.access_token
+    if (!session?.access_token) {
+        throw new Error("No active session")
+    }
+    return session.access_token
 }
 
 export const getTasks = async () => {
