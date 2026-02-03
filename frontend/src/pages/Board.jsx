@@ -1,19 +1,41 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import { DndContext, closestCenter, DragOverlay, defaultDropAnimationSideEffects, useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useAuth } from '../context/AuthContext'
-import { getTasks, createTask, updateTask, deleteTask, createSubtask, updateSubtask, deleteSubtask, deleteTasksByStatus } from '../api/tasks'
+import { getTasks, createTask, updateTask, deleteTask, createSubtask, updateSubtask, deleteSubtask, deleteTasksByStatus, getBoards, getBoardMembers } from '../api/tasks'
 import TaskCard from '../components/TaskCard'
 import Modal from '../components/Modal'
-import { Plus, Loader2, Trash2, Settings } from 'lucide-react'
+import ChatSidebar from '../components/ChatSidebar'
+import { Plus, Loader2, Trash2, Settings, ArrowLeft, MessageSquare } from 'lucide-react'
 
-const COLUMNS = [
-    { id: 'Todo', title: 'Yapılacaklar' },
-    { id: 'Doing', title: 'Yapılıyor' },
-    { id: 'Done', title: 'Tamamlandı' }
-]
+// Template Definitions
+const TEMPLATES = {
+    standard: [
+        { id: 'Todo', title: 'Yapılacaklar', color: 'bg-orange-500' },
+        { id: 'Doing', title: 'Yapılıyor', color: 'bg-blue-500' },
+        { id: 'Done', title: 'Tamamlandı', color: 'bg-green-500' }
+    ],
+    professional: [
+        { id: 'Backlog', title: 'Backlog', color: 'bg-gray-500' },
+        { id: 'Todo', title: 'Yapılacak', color: 'bg-orange-500' },
+        { id: 'Doing', title: 'Yapılıyor', color: 'bg-blue-500' },
+        { id: 'Done', title: 'Tamamlandı', color: 'bg-green-500' }
+    ],
+    smart: [
+        { id: 'Idea', title: 'Fikir / Notlar', color: 'bg-purple-500' },
+        { id: 'Todo', title: 'Yapılacak', color: 'bg-orange-500' },
+        { id: 'Doing', title: 'Yapılıyor', color: 'bg-blue-500' },
+        { id: 'Review', title: 'Kontrol / Beklemede', color: 'bg-yellow-500' },
+        { id: 'Done', title: 'Tamamlandı', color: 'bg-green-500' }
+    ],
+    minimal: [
+        { id: 'Active', title: 'Aktif Görevler', color: 'bg-blue-600' },
+        { id: 'Done', title: 'Bitti', color: 'bg-green-600' }
+    ]
+}
 
-import { useRef } from 'react'
+
 
 function DroppableColumn({ column, tasks, children, onClear }) {
     const { setNodeRef } = useDroppable({
@@ -38,11 +60,7 @@ function DroppableColumn({ column, tasks, children, onClear }) {
         <div ref={setNodeRef} className="w-80 flex flex-col shrink-0 h-full relative group/column">
             <div className="flex items-center justify-between mb-4">
                 <h2 className="font-bold text-sm text-foreground flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full 
-                        ${column.id === 'Todo' ? 'bg-orange-500' : ''} 
-                        ${column.id === 'Doing' ? 'bg-blue-500' : ''} 
-                        ${column.id === 'Done' ? 'bg-green-500' : ''} 
-                    `} />
+                    <div className={`w-3 h-3 rounded-full ${column.color || 'bg-primary'}`} />
                     {column.title}
                 </h2>
                 <div className="flex items-center gap-2">
@@ -61,7 +79,7 @@ function DroppableColumn({ column, tasks, children, onClear }) {
 
                         {showMenu && (
                             <div className="absolute right-0 top-full mt-1 w-48 bg-card border border-border shadow-lg rounded-lg z-50 overflow-hidden text-sm animate-in fade-in zoom-in-95 duration-200">
-                                {column.id === 'Done' ? (
+                                {column.id === 'Done' || column.id === 'Bitti' ? (
                                     <button
                                         onClick={() => {
                                             onClear()
@@ -88,9 +106,16 @@ function DroppableColumn({ column, tasks, children, onClear }) {
 }
 
 export default function Board() {
+    const { id: boardId } = useParams()
+    const navigate = useNavigate()
     const { user } = useAuth()
+
     const [tasks, setTasks] = useState([])
+    const [columns, setColumns] = useState(TEMPLATES.standard)
     const [isLoading, setIsLoading] = useState(true)
+    const [boardTitle, setBoardTitle] = useState('')
+    const [inviteCode, setInviteCode] = useState('')
+    const [boardOwnerId, setBoardOwnerId] = useState('')
     const [activeId, setActiveId] = useState(null)
 
     // Edit State
@@ -100,53 +125,13 @@ export default function Board() {
     const [editPriority, setEditPriority] = useState('Medium')
     const [editStatus, setEditStatus] = useState('Todo')
     const [editDueDate, setEditDueDate] = useState('')
+    const [editAssignedTo, setEditAssignedTo] = useState('')
     const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
 
-    // ... (skipping unchanged parts)
+    // Member State
+    const [boardMembers, setBoardMembers] = useState([])
 
-    const openEditModal = (task) => {
-        setEditingTask(task)
-        setEditTitle(task.title)
-        setEditDesc(task.description || '')
-        setEditPriority(task.priority || 'Medium')
-        setEditStatus(task.status)
-        setEditDueDate(task.due_date ? task.due_date.split('T')[0] : '')
-    }
-
-    const handleUpdateTaskDetails = async (e) => {
-        e.preventDefault()
-        if (!editingTask) return
-
-        // Find the latest version of the task to preserve subtasks
-        const currentTask = tasks.find(t => t.id === editingTask.id)
-        const updatedTask = {
-            ...currentTask,
-            title: editTitle,
-            description: editDesc,
-            priority: editPriority,
-            status: editStatus, // Update status locally
-            due_date: editDueDate || null
-        }
-
-        // Optimistic
-        const optimisticallyUpdatedTasks = tasks.map(t => t.id === editingTask.id ? updatedTask : t)
-        setTasks(sortTasks(optimisticallyUpdatedTasks))
-        setEditingTask(null)
-
-        try {
-            await updateTask({
-                id: editingTask.id,
-                title: editTitle,
-                description: editDesc,
-                status: editStatus, // Send new status to API
-                priority: editPriority,
-                due_date: editDueDate || null
-            })
-        } catch (error) {
-            console.error("Update failed", error)
-            fetchTasks()
-        }
-    }
+    // ... (skipping unchanged parts) ...
 
     // Create State
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -155,25 +140,46 @@ export default function Board() {
     const [newPriority, setNewPriority] = useState('Medium')
     const [newDueDate, setNewDueDate] = useState('')
 
-    // Mobile Tab State (Moved here to fix Hook Order)
-    const [activeTab, setActiveTab] = useState('Todo')
+    // Mobile Tab State
+    const [activeTab, setActiveTab] = useState('')
+
+    // Chat State
+    const [isChatOpen, setIsChatOpen] = useState(false)
 
     useEffect(() => {
-        if (!user) return
-        fetchTasks()
-    }, [user])
+        if (!user || !boardId) return
 
-    // Handle window resize for responsive check
-    useEffect(() => {
-        const handleResize = () => {
-            setActiveTab(prev => prev)
+        const initBoard = async () => {
+            try {
+                // 1. Get Board Info to set columns
+                const boards = await getBoards()
+                const currentBoard = boards.find(b => b.id === boardId)
+                if (currentBoard) {
+                    setBoardTitle(currentBoard.title)
+                    setInviteCode(currentBoard.invite_code || '')
+                    setBoardOwnerId(currentBoard.user_id)
+                    const template = TEMPLATES[currentBoard.type] || TEMPLATES.standard
+                    setColumns(template)
+                    setActiveTab(template[0].id)
+                }
+
+                // 2. Fetch Tasks
+                await fetchTasks()
+            } catch (error) {
+                console.error("Board init error:", error)
+                navigate('/')
+            }
         }
+        initBoard()
+
+        // Handle window resize logic
+        const handleResize = () => setActiveTab(prev => prev)
         window.addEventListener('resize', handleResize)
         return () => window.removeEventListener('resize', handleResize)
-    }, [])
+    }, [user, boardId])
 
     // Filter columns for mobile view
-    const visibleColumns = window.innerWidth < 768 ? COLUMNS.filter(c => c.id === activeTab) : COLUMNS
+    const visibleColumns = window.innerWidth < 768 ? columns.filter(c => c.id === activeTab) : columns
 
     // Sorting helper
     const sortTasks = (tasksList) => {
@@ -202,7 +208,7 @@ export default function Board() {
 
     const fetchTasks = async () => {
         try {
-            const data = await getTasks()
+            const data = await getTasks(boardId) // Pass boardId
             console.log("Fetched Tasks:", data)
             // Always enforce sort on fetch
             setTasks(sortTasks(data || []))
@@ -285,24 +291,30 @@ export default function Board() {
             status: createColumnId,
             priority: newPriority,
             due_date: newDueDate || null,
-            user_id: user.id
+            user_id: user.id,
+            board_id: boardId,
+            profiles: { email: user.email } // Optimistic Profile
         }
 
         setTasks(sortTasks([...tasks, newTask]))
         setIsCreateModalOpen(false)
 
         try {
-            await createTask({
+            const createdTask = await createTask({
                 title: newTitle,
                 status: createColumnId,
                 priority: newPriority,
                 due_date: newDueDate || null,
-                position: tasks.length
+                position: tasks.length,
+                board_id: boardId
             })
-            fetchTasks()
+            // Update temp task with real one, preserving profile
+            const realTask = { ...createdTask[0], profiles: { email: user.email } }
+            setTasks(prev => sortTasks(prev.map(t => t.id === tempId ? realTask : t)))
         } catch (error) {
             console.error(error)
             setTasks(prev => prev.filter(t => t.id !== tempId))
+            alert("Görev oluşturulamadı")
         }
     }
 
@@ -327,10 +339,56 @@ export default function Board() {
         }
     }
 
-    // Functions moved up to state declaration area
+    const openEditModal = (task) => {
+        setEditingTask(task)
+        setEditTitle(task.title)
+        setEditDesc(task.description || '')
+        setEditPriority(task.priority || 'Medium')
+        setEditStatus(task.status)
+        setEditDueDate(task.due_date ? task.due_date.split('T')[0] : '')
+        setEditAssignedTo(task.assigned_to || '')
+    }
+
+    const handleUpdateTaskDetails = async (e) => {
+        e.preventDefault()
+        if (!editTitle.trim()) return
+
+        const updatedTask = {
+            ...editingTask,
+            title: editTitle,
+            description: editDesc,
+            priority: editPriority,
+            status: editStatus,
+            due_date: editDueDate || null,
+            assigned_to: editAssignedTo || null,
+            // Optimistic Assignee Update
+            assignees: boardMembers.find(m => m.user_id === editAssignedTo)?.profiles
+        }
+
+        // Optimistic Update
+        setTasks(prev => sortTasks(prev.map(t => t.id === editingTask.id ? updatedTask : t)))
+        setEditingTask(null)
+
+        try {
+            await updateTask({
+                id: editingTask.id,
+                title: editTitle,
+                description: editDesc,
+                priority: editPriority,
+                status: editStatus,
+                due_date: editDueDate || null,
+                assigned_to: editAssignedTo || null,
+                board_id: boardId
+            })
+        } catch (error) {
+            console.error("Update failed", error)
+            alert("Güncelleme başarısız oldu")
+            fetchTasks()
+        }
+    }
 
     const handleClearColumn = async (columnId) => {
-        if (columnId !== 'Done') return
+        if (columnId !== 'Done' && columnId !== 'Bitti') return
         if (!confirm("Tamamlanan tüm görevleri silmek istediğinize emin misiniz?")) return
 
         // Optimistic delete
@@ -369,6 +427,46 @@ export default function Board() {
 
     return (
         <div className="p-4 md:p-6 h-full flex flex-col">
+            <div className="flex items-center gap-4 mb-4">
+                <button
+                    onClick={() => navigate('/')}
+                    className="p-2 hover:bg-muted rounded-full transition-colors"
+                >
+                    <ArrowLeft className="h-5 w-5" />
+                </button>
+                <h1 className="text-xl font-bold">{boardTitle || 'Pano'}</h1>
+                {inviteCode && user?.id === boardOwnerId && (
+                    <div className="ml-auto md:ml-4 flex items-center gap-2 bg-secondary/50 px-3 py-1.5 rounded-md border border-border/50">
+                        <span className="text-xs text-muted-foreground font-mono tracking-wider">
+                            Kod: <strong className="text-foreground">{inviteCode}</strong>
+                        </span>
+                        <button
+                            onClick={() => {
+                                navigator.clipboard.writeText(inviteCode)
+                                alert("Davet kodu kopyalandı!")
+                            }}
+                            className="text-xs bg-background hover:bg-muted border px-2 py-0.5 rounded transition-colors"
+                        >
+                            Kopyala
+                        </button>
+                    </div>
+                )}
+
+                <button
+                    onClick={() => setIsChatOpen(!isChatOpen)}
+                    className={`ml-auto p-2 rounded-full transition-colors ${isChatOpen ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                >
+                    <MessageSquare className="h-5 w-5" />
+                </button>
+            </div>
+
+            <ChatSidebar
+                boardId={boardId}
+                boardTitle={boardTitle}
+                isOpen={isChatOpen}
+                onClose={() => setIsChatOpen(false)}
+            />
+
             {/* Edit Modal */}
             <Modal
                 isOpen={!!editingTask}
@@ -418,17 +516,34 @@ export default function Board() {
                         </div>
                     </div>
 
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium">Durum (Sütun Değiştir)</label>
-                        <select
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            value={editStatus}
-                            onChange={(e) => setEditStatus(e.target.value)}
-                        >
-                            {COLUMNS.map(col => (
-                                <option key={col.id} value={col.id}>{col.title}</option>
-                            ))}
-                        </select>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Durum</label>
+                            <select
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                value={editStatus}
+                                onChange={(e) => setEditStatus(e.target.value)}
+                            >
+                                {columns.map(col => (
+                                    <option key={col.id} value={col.id}>{col.title}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Atanan Kişi</label>
+                            <select
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                value={editAssignedTo}
+                                onChange={(e) => setEditAssignedTo(e.target.value)}
+                            >
+                                <option value="">Atanmamış</option>
+                                {boardMembers.map(member => (
+                                    <option key={member.user_id} value={member.user_id}>
+                                        {member.profiles?.email || member.user_id}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
 
                     {/* Subtasks Section */}
@@ -634,7 +749,7 @@ export default function Board() {
 
             {/* Mobile Tab Navigation */}
             <div className="flex md:hidden bg-muted/20 p-1 rounded-lg mb-4 shrink-0 overflow-x-auto">
-                {COLUMNS.map(col => (
+                {columns.map(col => (
                     <button
                         key={col.id}
                         onClick={() => setActiveTab(col.id)}
@@ -661,7 +776,7 @@ export default function Board() {
                     onDragEnd={handleDragEnd}
                 >
                     {/* Render filtered columns for mobile, all for desktop */}
-                    {COLUMNS.map(col => {
+                    {columns.map(col => {
                         // On mobile, hide inactive columns
                         const isHiddenOnMobile = activeTab !== col.id
 
@@ -715,6 +830,6 @@ export default function Board() {
                     </DragOverlay>
                 </DndContext>
             </div>
-        </div>
+        </div >
     )
 }

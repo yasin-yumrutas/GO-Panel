@@ -53,16 +53,31 @@ func main() {
 	})
 
 	r.Route("/api", func(r chi.Router) {
-		r.Use(api.AuthMiddleware)
-		r.Get("/tasks", api.GetTasks)
-		r.Post("/tasks", api.CreateTask)
-		r.Put("/tasks", api.UpdateTask)
-		r.Delete("/tasks", api.DeleteTask)
+		// WebSocket Route (Auth handled via Query Param)
+		r.Get("/chat", api.HandleWebSocket)
 
-		// Alt Görevler (Subtasks)
-		r.Post("/subtasks", api.CreateSubtask)
-		r.Put("/subtasks", api.UpdateSubtask)
-		r.Delete("/subtasks", api.DeleteSubtask)
+		// Protected Routes Group
+		r.Group(func(r chi.Router) {
+			r.Use(api.AuthMiddleware)
+
+			r.Get("/tasks", api.GetTasks)
+			r.Post("/tasks", api.CreateTask)
+			r.Put("/tasks", api.UpdateTask)
+			r.Delete("/tasks", api.DeleteTask)
+			r.Delete("/tasks/bulk", api.DeleteTasksByStatus)
+
+			// Panolar (Boards)
+			r.Get("/boards", api.GetBoards)
+			r.Post("/boards", api.CreateBoard)
+			r.Post("/boards/join", api.JoinBoard)
+			r.Delete("/boards", api.DeleteBoard)
+			r.Get("/boards/members", api.GetBoardMembers)
+
+			// Alt Görevler (Subtasks)
+			r.Post("/subtasks", api.CreateSubtask)
+			r.Put("/subtasks", api.UpdateSubtask)
+			r.Delete("/subtasks", api.DeleteSubtask)
+		})
 	})
 
 	// Statik Dosyalar (Frontend Deployment)

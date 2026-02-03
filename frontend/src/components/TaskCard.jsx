@@ -117,9 +117,23 @@ export default function TaskCard({ task, onDelete, onClick }) {
                 <div {...listeners} className="cursor-grab active:cursor-grabbing p-1 hover:bg-muted rounded">
                     <GripVertical className="h-4 w-4" />
                 </div>
-                <div className="flex -space-x-2">
-                    {/* Placeholder avatars */}
-                    <div className="h-6 w-6 rounded-full bg-primary/20 border-2 border-background flex items-center justify-center text-[10px] font-bold">A</div>
+
+                <div className="flex -space-x-2 items-center">
+                    {/* Creator (only if different from assignee or if no assignee) */}
+                    {(!task.assignees || task.assignees.email !== task.profiles?.email) && (
+                        <div className="h-6 w-6 rounded-full bg-secondary border border-background flex items-center justify-center text-[10px] font-bold text-muted-foreground overflow-hidden uppercase" title={`Oluşturan: ${task.profiles?.email}`}>
+                            {task.profiles?.email?.[0] || '?'}
+                        </div>
+                    )}
+
+                    {/* Assignee */}
+                    {task.assignees && (
+                        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 p-[1.5px] shadow-sm z-10" title={`Atanan: ${task.assignees.email}`}>
+                            <div className="h-full w-full rounded-full bg-background flex items-center justify-center text-[10px] font-bold text-foreground overflow-hidden uppercase">
+                                {task.assignees.email[0]}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

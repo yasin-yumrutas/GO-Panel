@@ -1,6 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { NotificationProvider } from './context/NotificationContext'
 import Login from './pages/Login'
+import Dashboard from './pages/Dashboard'
 import Board from './pages/Board'
 import InstallPWA from './components/InstallPWA'
 import Layout from './components/Layout'
@@ -14,20 +16,30 @@ const ProtectedRoute = ({ children }) => {
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Board />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-        <InstallPWA />
-      </Router>
+      <NotificationProvider>
+        <Router>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/board/:id"
+              element={
+                <ProtectedRoute>
+                  <Board />
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+          <InstallPWA />
+        </Router>
+      </NotificationProvider>
     </AuthProvider>
   )
 }

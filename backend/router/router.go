@@ -39,6 +39,13 @@ func Setup() *chi.Mux {
 
 	r.Route("/api", func(r chi.Router) {
 		r.Use(api.AuthMiddleware)
+
+		// Panolar (Boards)
+		r.Get("/boards", api.GetBoards)
+		r.Post("/boards", api.CreateBoard)
+		r.Delete("/boards", api.DeleteBoard)
+
+		// Görevler (Tasks)
 		r.Get("/tasks", api.GetTasks)
 		r.Post("/tasks", api.CreateTask)
 		r.Patch("/tasks", api.UpdateTask) // PATCH destekle

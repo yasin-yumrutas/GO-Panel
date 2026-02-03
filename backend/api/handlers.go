@@ -19,6 +19,10 @@ type Subtask struct {
 	Position    int    `json:"position"`
 }
 
+type Profile struct {
+	Email string `json:"email"`
+}
+
 type Task struct {
 	ID          string    `json:"id,omitempty"`
 	Title       string    `json:"title,omitempty"`
@@ -28,7 +32,11 @@ type Task struct {
 	DueDate     *string   `json:"due_date,omitempty"`
 	Position    int       `json:"position,omitempty"`
 	UserID      string    `json:"user_id,omitempty"`
+	BoardID     string    `json:"board_id,omitempty"`
+	AssignedTo  *string   `json:"assigned_to,omitempty"`
 	Subtasks    []Subtask `json:"subtasks,omitempty"`
+	Profile     *Profile  `json:"profiles,omitempty"`  // Creator (via user_id)
+	Assignee    *Profile  `json:"assignees,omitempty"` // Assignee (via assigned_to)
 }
 
 // performSupabaseRequest, Supabase REST API'sine istek atmak için yardımcı fonksiyon
@@ -88,10 +96,15 @@ func GetTasks(w http.ResponseWriter, r *http.Request) {
 	}
 	token := authHeader[7:]
 
-	// SELECT *, subtasks(*) FROM tasks
-	// Not: Sıralamayı Go tarafında yapacağız çünkü Priority string (High/Medium/Low)
-	// Supabase'den raw veri çekiyoruz.
-	resp, err := performSupabaseRequest("GET", "tasks?select=*,subtasks(*)", token, nil)
+	// SELECT *, subtasks(*), profiles!user_id(email), assignees:profiles!assigned_to(email)
+	// Not: PostgREST'te birden fazla FK aynı tabloya gidiyorsa !FK_COL_NAME syntax'ı ile ayırmak gerekir.
+	endpoint := "tasks?select=*,subtasks(*),profiles!user_id(email),assignees:profiles!assigned_to(email)"
+	boardID := r.URL.Query().Get("board_id")
+	if boardID != "" {
+		endpoint = fmt.Sprintf("%s&board_id=eq.%s", endpoint, boardID)
+	}
+
+	resp, err := performSupabaseRequest("GET", endpoint, token, nil)
 	if err != nil {
 		fmt.Println("GetTasks Hatası:", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)

@@ -1,36 +1,116 @@
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { LogOut, Settings, User, Bell, ChevronDown, Sun, Moon } from 'lucide-react'
+import { useNotifications } from '../context/NotificationContext'
+import { LogOut, Settings, User, Bell, ChevronDown, Sun, Moon, X } from 'lucide-react'
 
 export default function Topbar() {
     const { user, signOut } = useAuth()
+    const { notifications, unreadCount, markAllAsRead, clearAll } = useNotifications()
+    const navigate = useNavigate()
     const [isOpen, setIsOpen] = useState(false)
+    const [isNotifOpen, setIsNotifOpen] = useState(false)
     const dropdownRef = useRef(null)
+    const notifRef = useRef(null)
 
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
                 setIsOpen(false)
             }
+            if (notifRef.current && !notifRef.current.contains(event.target)) {
+                setIsNotifOpen(false)
+            }
         }
         document.addEventListener("mousedown", handleClickOutside)
         return () => document.removeEventListener("mousedown", handleClickOutside)
     }, [])
 
+    const handleNotificationClick = (boardId) => {
+        navigate(`/board/${boardId}`)
+        setIsNotifOpen(false)
+    }
+
     return (
         <header className="h-16 border-b border-white/20 bg-white/10 backdrop-blur-md flex items-center justify-between px-6 sticky top-0 z-40 shadow-sm">
             <div className="flex items-center gap-4">
-                {/* Mobile menu trigger could go here */}
                 <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-purple-600 hidden md:block">
                     GO-Panel
                 </h1>
             </div>
 
             <div className="flex items-center gap-4">
-                <button className="p-2 relative text-muted-foreground hover:text-foreground transition-colors rounded-full hover:bg-white/20">
-                    <Bell className="h-5 w-5" />
-                    <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full border-2 border-background"></span>
-                </button>
+                {/* Notification Bell */}
+                <div className="relative" ref={notifRef}>
+                    <button
+                        onClick={() => setIsNotifOpen(!isNotifOpen)}
+                        className="p-2 relative text-muted-foreground hover:text-foreground transition-colors rounded-full hover:bg-white/20"
+                    >
+                        <Bell className="h-5 w-5" />
+                        {unreadCount > 0 && (
+                            <span className="absolute top-1 right-1 h-5 w-5 bg-red-500 rounded-full border-2 border-background text-[10px] font-bold text-white flex items-center justify-center">
+                                {unreadCount > 9 ? '9+' : unreadCount}
+                            </span>
+                        )}
+                    </button>
+
+                    {/* Notification Dropdown */}
+                    {isNotifOpen && (
+                        <div className="absolute right-0 top-full mt-2 w-screen sm:w-80 max-w-md max-h-[70vh] overflow-y-auto rounded-xl border border-white/20 bg-white/95 dark:bg-black/95 backdrop-blur-xl shadow-2xl animate-in fade-in slide-in-from-top-2">
+                            <div className="p-3 border-b border-border/50 flex items-center justify-between sticky top-0 bg-white/95 dark:bg-black/95 backdrop-blur-sm">
+                                <h3 className="font-semibold text-sm">Bildirimler</h3>
+                                {notifications.length > 0 && (
+                                    <button
+                                        onClick={clearAll}
+                                        className="text-xs text-destructive hover:underline"
+                                    >
+                                        Tümünü Temizle
+                                    </button>
+                                )}
+                            </div>
+
+                            {notifications.length === 0 ? (
+                                <div className="p-8 text-center text-muted-foreground text-sm">
+                                    Henüz bildirim yok 🔔
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-border/50">
+                                    {notifications.slice().reverse().map((notif) => (
+                                        <div
+                                            key={notif.id}
+                                            onClick={() => handleNotificationClick(notif.boardId)}
+                                            className="p-3 hover:bg-primary/5 cursor-pointer transition-colors"
+                                        >
+                                            <div className="flex items-start gap-2">
+                                                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                                                    {notif.sender[0].toUpperCase()}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-xs font-medium text-foreground">
+                                                        <span className="text-primary">{notif.sender}</span>
+                                                        {' • '}
+                                                        <span className="text-muted-foreground">{notif.boardTitle}</span>
+                                                    </p>
+                                                    <p className="text-sm text-foreground mt-0.5 line-clamp-2">
+                                                        {notif.message}
+                                                    </p>
+                                                    <p className="text-[10px] text-muted-foreground mt-1">
+                                                        {new Date(notif.timestamp).toLocaleString('tr-TR', {
+                                                            hour: '2-digit',
+                                                            minute: '2-digit',
+                                                            day: 'numeric',
+                                                            month: 'short'
+                                                        })}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
 
                 <div className="relative" ref={dropdownRef}>
                     <button
@@ -39,7 +119,6 @@ export default function Topbar() {
                     >
                         <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 p-[2px]">
                             <div className="h-full w-full rounded-full bg-background flex items-center justify-center overflow-hidden">
-                                {/* Avatar Image or Initial */}
                                 <span className="font-bold text-xs">{user?.email?.[0].toUpperCase()}</span>
                             </div>
                         </div>
